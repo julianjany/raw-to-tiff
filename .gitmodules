@@ -1,0 +1,4 @@
+[submodule "libs/LibRaw"]
+	path = libs/LibRaw
+	url = https://github.com/julianjany/LibRaw.git
+	branch = private-main
