@@ -2,3 +2,7 @@
 	path = libs/LibRaw
 	url = https://github.com/julianjany/LibRaw.git
 	branch = private-main
+[submodule "libs/TinyTIFF"]
+	path = libs/TinyTIFF
+	url = https://github.com/jkriege2/TinyTIFF.git
+	branch = master
