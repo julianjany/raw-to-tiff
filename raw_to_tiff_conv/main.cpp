@@ -25,10 +25,13 @@ int get_rgb_id(LibRaw& ip, int const row, int const col) {
   }
 }
 
-int main() {
+int main(int argc, char const* argv[]) {
+  if (argc < 2) {
+    std::cout << "supply a filename\n";
+  }
+
   LibRaw ip{};
-  auto const raw_directory_path{
-      std::filesystem::path{"..\\..\\photographyblog"}};
+  auto const raw_directory_path{std::filesystem::path{argv[1]}};
   auto const raw_files{std::filesystem::directory_iterator{raw_directory_path}};
   size_t const scale_factor{2U};
   static constexpr size_t channel_count{3U};
@@ -37,7 +40,7 @@ int main() {
     ip.open_file(raw_filename.path().c_str());
     ip.unpack();
 
-    {
+    {  // process single image
       auto const& sizes{ip.imgdata.sizes};
       auto const& imgdata{ip.imgdata};
       auto const& rawdata{ip.imgdata.rawdata};
@@ -59,7 +62,11 @@ int main() {
               size_t const raw_col{tiff_col * scale_factor + raw_col_offset +
                                    sizes.left_margin};
               size_t const raw_pixel_id{raw_row * sizes.raw_width + raw_col};
-              uint16_t const raw_value{rawdata.raw_image[raw_pixel_id]};
+
+              auto const raw_shift{
+                  static_cast<uint16_t>(16U - imgdata.color.raw_bps)};
+              auto const raw_value{static_cast<uint16_t>(
+                  rawdata.raw_image[raw_pixel_id] << raw_shift)};
 
               int const rgb_id{get_rgb_id(ip, raw_row, raw_col)};
               accumulator[rgb_id].sum += raw_value;
@@ -70,23 +77,36 @@ int main() {
                                      channel_count};
           for (size_t channel_id{0}; channel_id < channel_count; ++channel_id) {
             if (accumulator[channel_id].count != 0) {
-              tiff_data[tiff_pixel_id + channel_id] =
-                  accumulator[channel_id].sum / accumulator[channel_id].count;
+              tiff_data[tiff_pixel_id + channel_id] = static_cast<uint16_t>(
+                  accumulator[channel_id].sum / accumulator[channel_id].count);
             }
           }
         }
       }
 
-      TinyTIFFWriterFile* tif = TinyTIFFWriter_open(
-          "myfile.tif", 16, TinyTIFFWriter_UInt, channel_count, tiff_width,
-          tiff_height, TinyTIFFWriter_RGB);
-      TinyTIFFWriter_writeImage(tif, tiff_data.data());
-      TinyTIFFWriter_close(tif);
-
-      std::cout << raw_filename << ": " << ip.imgdata.color.raw_bps << "bps\n";
-      std::cout << raw_filename << ": " << ip.imgdata.idata.cdesc << "colors\n";
-
-      return 0;
+      {  // store as tiff
+        auto const raw_filename_ext{raw_filename.path().filename().string()};
+        auto const raw_filename{
+            raw_filename_ext.substr(0, raw_filename_ext.find_last_of('.'))};
+        auto const tiff_filename{std::format("{}.tiff", raw_filename)};
+        TinyTIFFWriterFile* p_tiff = TinyTIFFWriter_open(
+            tiff_filename.c_str(), 16, TinyTIFFWriter_UInt, channel_count,
+            tiff_width, tiff_height, TinyTIFFWriter_RGB);
+        TinyTIFFWriter_writeImage(p_tiff, tiff_data.data());
+        auto const metadata{std::format(
+            "{{ "
+            "\"raw_bps\": {}, "
+            "\"iso_speed\": {}, "
+            "\"scale_factor\": {}, "
+            "\"camera\": \"{} {}\", "
+            "\"lens\": \"{} {}\" "
+            "}}\n",
+            imgdata.color.raw_bps, imgdata.other.iso_speed, scale_factor,
+            imgdata.idata.normalized_make, imgdata.idata.normalized_model,
+            imgdata.lens.LensMake, imgdata.lens.Lens)};
+        TinyTIFFWriter_close_withdescription(p_tiff, metadata.c_str());
+        std::cout << std::format("processed {}\n", raw_filename_ext);
+      }
     }
 
     ip.recycle();
