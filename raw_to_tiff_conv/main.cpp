@@ -25,6 +25,53 @@ int get_rgb_id(LibRaw& ip, int const row, int const col) {
   }
 }
 
+std::string get_metadata_string(libraw_data_t const& imgdata,
+                                size_t const scale_factor) {
+  auto const cam_mul{
+      std::format(R"("cam_mul": [ {}, {}, {}, {} ])", imgdata.color.cam_mul[0],
+                  imgdata.color.cam_mul[1], imgdata.color.cam_mul[2],
+                  imgdata.color.cam_mul[3])};
+
+  auto const cblack{std::format(
+      R"("cblack": [ {}, {}, {}, {}, {}, {}, {}, {}, {}, {} ])",
+      imgdata.color.cblack[0], imgdata.color.cblack[1], imgdata.color.cblack[2],
+      imgdata.color.cblack[3], imgdata.color.cblack[4], imgdata.color.cblack[5],
+      imgdata.color.cblack[6], imgdata.color.cblack[7], imgdata.color.cblack[8],
+      imgdata.color.cblack[9])};
+
+  auto const rgb_cam{std::format(
+      R"("rgb_cam": [
+  [ {}, {}, {}, {} ],
+  [ {}, {}, {}, {} ],
+  [ {}, {}, {}, {} ]
+])",
+      imgdata.color.rgb_cam[0][0], imgdata.color.rgb_cam[0][1],
+      imgdata.color.rgb_cam[0][2], imgdata.color.rgb_cam[0][3],
+      imgdata.color.rgb_cam[1][0], imgdata.color.rgb_cam[1][1],
+      imgdata.color.rgb_cam[1][2], imgdata.color.rgb_cam[1][3],
+      imgdata.color.rgb_cam[2][0], imgdata.color.rgb_cam[2][1],
+      imgdata.color.rgb_cam[2][2], imgdata.color.rgb_cam[2][3])};
+
+  auto const metadata{std::format(
+      R"({{
+  "raw_bps": {},
+  "iso_speed": {},
+  "scale_factor": {},
+  "camera": "{} {}",
+  "lens": "{} {}",
+  "cc_params": {{
+  {},
+  {},
+  {}
+  }}
+}})",
+      imgdata.color.raw_bps, imgdata.other.iso_speed, scale_factor,
+      imgdata.idata.normalized_make, imgdata.idata.normalized_model,
+      imgdata.lens.LensMake, imgdata.lens.Lens, cam_mul, cblack, rgb_cam)};
+
+  return metadata;
+}
+
 int main(int argc, char const* argv[]) {
   if (argc < 2) {
     std::cout << "supply a filename\n";
@@ -93,17 +140,7 @@ int main(int argc, char const* argv[]) {
             tiff_filename.c_str(), 16, TinyTIFFWriter_UInt, channel_count,
             tiff_width, tiff_height, TinyTIFFWriter_RGB);
         TinyTIFFWriter_writeImage(p_tiff, tiff_data.data());
-        auto const metadata{std::format(
-            "{{ "
-            "\"raw_bps\": {}, "
-            "\"iso_speed\": {}, "
-            "\"scale_factor\": {}, "
-            "\"camera\": \"{} {}\", "
-            "\"lens\": \"{} {}\" "
-            "}}\n",
-            imgdata.color.raw_bps, imgdata.other.iso_speed, scale_factor,
-            imgdata.idata.normalized_make, imgdata.idata.normalized_model,
-            imgdata.lens.LensMake, imgdata.lens.Lens)};
+        auto const metadata{get_metadata_string(imgdata, scale_factor)};
         TinyTIFFWriter_close_withdescription(p_tiff, metadata.c_str());
         std::cout << std::format("processed {}\n", raw_filename_ext);
       }
