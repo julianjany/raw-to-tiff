@@ -25,6 +25,10 @@ int get_rgb_id(LibRaw& ip, int const row, int const col) {
   }
 }
 
+char get_rgb_char(LibRaw& ip, int const row, int const col) {
+  return ip.imgdata.idata.cdesc[ip.COLOR(row, col)];
+}
+
 std::string get_metadata_string(libraw_data_t const& imgdata,
                                 size_t const scale_factor) {
   auto const cam_mul{
@@ -95,6 +99,23 @@ int main(int argc, char const* argv[]) {
       size_t const tiff_height{sizes.height / scale_factor};
       size_t const tiff_pixelcount{tiff_width * tiff_height};
       auto tiff_data{std::vector<uint16_t>(tiff_pixelcount * channel_count, 0)};
+
+      // std::cout << "whole sensor (top left)\n";
+      // for (size_t raw_row{0}; raw_row < 4; ++raw_row) {
+      //   for (size_t raw_col{0}; raw_col < 4; ++raw_col) {
+      //     std::cout << get_rgb_char(ip, raw_row, raw_col);
+      //   }
+      //   std::cout << '\n';
+      // }
+
+      // std::cout << "sensor visible area (top left)\n";
+      // for (size_t raw_row{0}; raw_row < 4; ++raw_row) {
+      //   for (size_t raw_col{0}; raw_col < 4; ++raw_col) {
+      //     std::cout << get_rgb_char(ip, raw_row + sizes.top_margin,
+      //                               raw_col + sizes.left_margin);
+      //   }
+      //   std::cout << '\n';
+      // }
 
       for (size_t tiff_row{0}; tiff_row < tiff_height; ++tiff_row) {
         for (size_t tiff_col{0}; tiff_col < tiff_width; ++tiff_col) {
