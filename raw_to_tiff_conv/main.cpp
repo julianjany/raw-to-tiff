@@ -84,21 +84,30 @@ int main(int argc, char const* argv[]) {
   LibRaw ip{};
   auto const raw_directory_path{std::filesystem::path{argv[1]}};
   auto const raw_files{std::filesystem::directory_iterator{raw_directory_path}};
-  size_t const scale_factor{2U};
-  static constexpr size_t channel_count{3U};
 
-  for (auto const& raw_filename : raw_files) {
-    ip.open_file(raw_filename.path().c_str());
+  for (auto const& raw_filepath : raw_files) {
+    auto const raw_filename_ext{raw_filepath.path().filename().string()};
+    auto const file_ext_id{raw_filename_ext.find_last_of('.')};
+    if (file_ext_id == std::string::npos) {
+      continue;
+    }
+    auto const file_ext{raw_filename_ext.substr(file_ext_id)};
+    if (file_ext != ".ARW") {
+      // std::cout << "ignored " << raw_filepath;
+      continue;
+    }
+
+    ip.open_file(raw_filepath.path().c_str());
     ip.unpack();
 
     {  // process single image
       auto const& sizes{ip.imgdata.sizes};
       auto const& imgdata{ip.imgdata};
       auto const& rawdata{ip.imgdata.rawdata};
-      size_t const tiff_width{sizes.width / scale_factor};
-      size_t const tiff_height{sizes.height / scale_factor};
+      size_t const tiff_width{sizes.width};
+      size_t const tiff_height{sizes.height};
       size_t const tiff_pixelcount{tiff_width * tiff_height};
-      auto tiff_data{std::vector<uint16_t>(tiff_pixelcount * channel_count, 0)};
+      auto tiff_data{std::vector<uint16_t>(tiff_pixelcount, 0)};
 
       // std::cout << "whole sensor (top left)\n";
       // for (size_t raw_row{0}; raw_row < 4; ++raw_row) {
@@ -117,51 +126,32 @@ int main(int argc, char const* argv[]) {
       //   std::cout << '\n';
       // }
 
+      auto const raw_shift{static_cast<uint16_t>(16U - imgdata.color.raw_bps)};
+
       for (size_t tiff_row{0}; tiff_row < tiff_height; ++tiff_row) {
         for (size_t tiff_col{0}; tiff_col < tiff_width; ++tiff_col) {
-          // accumulate raw values for 'scale-region'
-          auto accumulator{std::array<accumulator_t, 3>{}};
-          for (size_t raw_row_offset{0}; raw_row_offset < scale_factor;
-               ++raw_row_offset) {
-            for (size_t raw_col_offset{0}; raw_col_offset < scale_factor;
-                 ++raw_col_offset) {
-              size_t const raw_row{tiff_row * scale_factor + raw_row_offset +
-                                   sizes.top_margin};
-              size_t const raw_col{tiff_col * scale_factor + raw_col_offset +
-                                   sizes.left_margin};
-              size_t const raw_pixel_id{raw_row * sizes.raw_width + raw_col};
+          size_t const raw_row{tiff_row + sizes.top_margin};
+          size_t const raw_col{tiff_col + sizes.left_margin};
+          size_t const raw_pixel_id{raw_row * sizes.raw_width + raw_col};
 
-              auto const raw_shift{
-                  static_cast<uint16_t>(16U - imgdata.color.raw_bps)};
-              auto const raw_value{static_cast<uint16_t>(
-                  rawdata.raw_image[raw_pixel_id] << raw_shift)};
+          auto const raw_value{static_cast<uint16_t>(
+              rawdata.raw_image[raw_pixel_id] << raw_shift)};
 
-              int const rgb_id{get_rgb_id(ip, raw_row, raw_col)};
-              accumulator[rgb_id].sum += raw_value;
-              accumulator[rgb_id].count++;
-            }
-          }
-          size_t const tiff_pixel_id{(tiff_row * tiff_width + tiff_col) *
-                                     channel_count};
-          for (size_t channel_id{0}; channel_id < channel_count; ++channel_id) {
-            if (accumulator[channel_id].count != 0) {
-              tiff_data[tiff_pixel_id + channel_id] = static_cast<uint16_t>(
-                  accumulator[channel_id].sum / accumulator[channel_id].count);
-            }
-          }
+          size_t const tiff_pixel_id{tiff_row * tiff_width + tiff_col};
+          tiff_data[tiff_pixel_id] = raw_value;
         }
       }
 
       {  // store as tiff
-        auto const raw_filename_ext{raw_filename.path().filename().string()};
+        auto const raw_filename_ext{raw_filepath.path().filename().string()};
         auto const raw_filename{
             raw_filename_ext.substr(0, raw_filename_ext.find_last_of('.'))};
         auto const tiff_filename{std::format("{}.tiff", raw_filename)};
         TinyTIFFWriterFile* p_tiff = TinyTIFFWriter_open(
-            tiff_filename.c_str(), 16, TinyTIFFWriter_UInt, channel_count,
-            tiff_width, tiff_height, TinyTIFFWriter_RGB);
+            tiff_filename.c_str(), 16, TinyTIFFWriter_UInt, 1U, tiff_width,
+            tiff_height, TinyTIFFWriter_Greyscale);
         TinyTIFFWriter_writeImage(p_tiff, tiff_data.data());
-        auto const metadata{get_metadata_string(imgdata, scale_factor)};
+        auto const metadata{get_metadata_string(imgdata, 1)};
         TinyTIFFWriter_close_withdescription(p_tiff, metadata.c_str());
         std::cout << std::format("processed {}\n", raw_filename_ext);
       }
