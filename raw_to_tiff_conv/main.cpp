@@ -36,6 +36,8 @@ std::string get_metadata_string(libraw_data_t const& imgdata,
                   imgdata.color.cam_mul[1], imgdata.color.cam_mul[2],
                   imgdata.color.cam_mul[3])};
 
+  auto const black{std::format(R"("black": {})", imgdata.color.black)};
+
   auto const cblack{std::format(
       R"("cblack": [ {}, {}, {}, {}, {}, {}, {}, {}, {}, {} ])",
       imgdata.color.cblack[0], imgdata.color.cblack[1], imgdata.color.cblack[2],
@@ -66,12 +68,14 @@ std::string get_metadata_string(libraw_data_t const& imgdata,
   "cc_params": {{
   {},
   {},
+  {},
   {}
   }}
 }})",
       imgdata.color.raw_bps, imgdata.other.iso_speed, scale_factor,
       imgdata.idata.normalized_make, imgdata.idata.normalized_model,
-      imgdata.lens.LensMake, imgdata.lens.Lens, cam_mul, cblack, rgb_cam)};
+      imgdata.lens.LensMake, imgdata.lens.Lens, cam_mul, black, cblack,
+      rgb_cam)};
 
   return metadata;
 }
